@@ -1,90 +1,61 @@
 'use client';
-import { useChat } from '@ai-sdk/react';
+
 import { AnimatePresence, motion } from 'framer-motion';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-// Component imports
 import ChatBottombar from '@/components/chat/chat-bottombar';
 import ChatLanding from '@/components/chat/chat-landing';
 import ChatMessageContent from '@/components/chat/chat-message-content';
 import { SimplifiedChatView } from '@/components/chat/simple-chat-view';
-import {
-  ChatBubble,
-  ChatBubbleMessage,
-} from '@/components/ui/chat/chat-bubble';
+import { ChatBubble, ChatBubbleMessage } from '@/components/ui/chat/chat-bubble';
 import WelcomeModal from '@/components/welcome-modal';
 import { Info } from 'lucide-react';
-import HelperBoost from './HelperBoost';
-import { FastfolioCTA } from '@/components/fastfolio-cta';
-import { FastfolioPopup } from '@/components/fastfolio-popup';
+import HelperBoost from '@/components/chat/HelperBoost';
 import { PoweredByFastfolio } from '@/components/powered-by-fastfolio';
-import { FastfolioTracking } from '@/lib/fastfolio-tracking';
 
-// ClientOnly component for client-side rendering
-//@ts-ignore
-const ClientOnly = ({ children }) => {
-  const [hasMounted, setHasMounted] = useState(false);
-
-  useEffect(() => {
-    setHasMounted(true);
-  }, []);
-
-  if (!hasMounted) {
-    return null;
-  }
-
+// ----- Client-only wrapper -----
+const ClientOnly = ({ children }: { children: React.ReactNode }) => {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
   return <>{children}</>;
 };
 
-// Define Avatar component props interface
 interface AvatarProps {
   hasActiveTool: boolean;
   videoRef: React.RefObject<HTMLVideoElement | null>;
   isTalking: boolean;
 }
 
-// Dynamic import of Avatar component
+// ----- Avatar (UI only) -----
 const Avatar = dynamic<AvatarProps>(
   () =>
-    Promise.resolve(({ hasActiveTool, videoRef, isTalking }: AvatarProps) => {
-      // This function will only execute on the client
+    Promise.resolve(({ hasActiveTool, videoRef }: AvatarProps) => {
       const isIOS = () => {
-        // Multiple detection methods
-        const userAgent = window.navigator.userAgent;
+        const ua = window.navigator.userAgent;
         const platform = window.navigator.platform;
         const maxTouchPoints = window.navigator.maxTouchPoints || 0;
-
-        // UserAgent-based check
-        const isIOSByUA =
-          //@ts-ignore
-          /iPad|iPhone|iPod/.test(userAgent) && !window.MSStream;
-
-        // Platform-based check
-        const isIOSByPlatform = /iPad|iPhone|iPod/.test(platform);
-
-        // iPad Pro check
+        const isIOSUA =
+          // @ts-ignore
+          /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+        const isIOSPlat = /iPad|iPhone|iPod/.test(platform);
         const isIPadOS =
-          //@ts-ignore
+          // @ts-ignore
           platform === 'MacIntel' && maxTouchPoints > 1 && !window.MSStream;
-
-        // Safari check
-        const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
-
-        return isIOSByUA || isIOSByPlatform || isIPadOS || isSafari;
+        const isSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
+        return isIOSUA || isIOSPlat || isIPadOS || isSafari;
       };
 
-      // Conditional rendering based on detection
       return (
         <div
-          className={`flex items-center justify-center rounded-full transition-all duration-300 ${hasActiveTool ? 'h-20 w-20' : 'h-28 w-28'}`}
+          className={`flex items-center justify-center rounded-full transition-all duration-300 ${
+            hasActiveTool ? 'h-20 w-20' : 'h-28 w-28'
+          }`}
         >
-          <div
-            className="relative cursor-pointer"
-            onClick={() => (window.location.href = '/')}
-          >
+          <div className="relative cursor-pointer" onClick={() => (window.location.href = '/')}>
             {isIOS() ? (
               <img
                 src="/landing-memojis.png"
@@ -111,153 +82,70 @@ const Avatar = dynamic<AvatarProps>(
 );
 
 const MOTION_CONFIG = {
-  initial: { opacity: 0, y: 20 },
+  initial: { opacity: 0, y: 18 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: 20 },
-  transition: {
-    duration: 0.3,
-    ease: 'easeOut',
-  },
+  exit: { opacity: 0, y: 18 },
+  transition: { duration: 0.25, ease: 'easeOut' },
 };
 
-const Chat = () => {
+export default function Chat() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get('query');
+
   const [autoSubmitted, setAutoSubmitted] = useState(false);
   const [loadingSubmit, setLoadingSubmit] = useState(false);
   const [isTalking, setIsTalking] = useState(false);
-  const [showFastfolioPopup, setShowFastfolioPopup] = useState(false);
-  const [hasReachedLimit, setHasReachedLimit] = useState(false);
-  const [, forceUpdate] = useState({});
 
-  const {
-    messages,
-    input,
-    handleInputChange,
-    handleSubmit,
-    isLoading,
-    stop,
-    setMessages,
-    setInput,
-    reload,
-    addToolResult,
-    append,
-  } = useChat({
-    onResponse: (response) => {
-      if (response) {
-        setLoadingSubmit(false);
-        setIsTalking(true);
-        if (videoRef.current) {
-          videoRef.current.play().catch((error) => {
-            console.error('Failed to play video:', error);
-          });
-        }
-        
-        // Don't increment here since we already increment on submit
-        // Just check if we should show popup
-        if (FastfolioTracking.shouldShowPopup()) {
-          setTimeout(() => {
-            setShowFastfolioPopup(true);
-            if (!FastfolioTracking.hasReachedLimit()) {
-              FastfolioTracking.markPopupShown();
-            }
-          }, 2000);
-        }
-      }
-    },
-    onFinish: () => {
-      setLoadingSubmit(false);
-      setIsTalking(false);
-      if (videoRef.current) {
-        videoRef.current.pause();
-      }
-    },
-    onError: (error) => {
-      setLoadingSubmit(false);
-      setIsTalking(false);
-      if (videoRef.current) {
-        videoRef.current.pause();
-      }
-      console.error('Chat error:', error.message, error.cause);
-      toast.error(`Error: ${error.message}`);
-    },
-    onToolCall: (tool) => {
-      const toolName = tool.toolCall.toolName;
-      console.log('Tool call:', toolName);
-    },
-  });
+  // Groq-friendly message model
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>([]);
+  const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const { currentAIMessage, latestUserMessage, hasActiveTool } = useMemo(() => {
-    const latestAIMessageIndex = messages.findLastIndex(
-      (m) => m.role === 'assistant'
-    );
-    const latestUserMessageIndex = messages.findLastIndex(
-      (m) => m.role === 'user'
-    );
+  const isToolInProgress = false; // no tools with Groq for now
 
-    const result = {
-      currentAIMessage:
-        latestAIMessageIndex !== -1 ? messages[latestAIMessageIndex] : null,
-      latestUserMessage:
-        latestUserMessageIndex !== -1 ? messages[latestUserMessageIndex] : null,
-      hasActiveTool: false,
-    };
-
-    if (result.currentAIMessage) {
-      result.hasActiveTool =
-        result.currentAIMessage.parts?.some(
-          (part) =>
-            part.type === 'tool-invocation' &&
-            part.toolInvocation?.state === 'result'
-        ) || false;
-    }
-
-    if (latestAIMessageIndex < latestUserMessageIndex) {
-      result.currentAIMessage = null;
-    }
-
-    return result;
-  }, [messages]);
-
-  const isToolInProgress = messages.some(
-    (m) =>
-      m.role === 'assistant' &&
-      m.parts?.some(
-        (part) =>
-          part.type === 'tool-invocation' &&
-          part.toolInvocation?.state !== 'result'
-      )
-  );
-
-  //@ts-ignore
-  const submitQuery = (query) => {
-    // Check rate limit before submitting
-    if (FastfolioTracking.hasReachedLimit()) {
-      setHasReachedLimit(true);
-      setShowFastfolioPopup(true);
-      return;
-    }
-    
-    if (!query.trim() || isToolInProgress) return;
-    
-    // Increment message count
-    FastfolioTracking.incrementMessageCount();
-    
-    // Force re-render to update remaining messages counter
-    forceUpdate({});
-    
-    // Check if limit reached after increment
-    if (FastfolioTracking.hasReachedLimit()) {
-      setHasReachedLimit(true);
-      setShowFastfolioPopup(true);
-    }
-    
-    setLoadingSubmit(true);
-    append({
-      role: 'user',
-      content: query,
+  // ---- API call to your /api/chat (Groq) ----
+  async function fetchGroqChat(nextMsgs: { role: string; content: string }[]) {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: nextMsgs }),
     });
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? '';
+  }
+
+  const submitQuery = async (query: string) => {
+    if (!query.trim() || isToolInProgress) return;
+
+    setLoadingSubmit(true);
+    setIsLoading(true);
+
+    const next = [...messages, { role: 'user', content: query }];
+    setMessages(next);
+
+    try {
+      const reply = await fetchGroqChat(next);
+      setMessages([...next, { role: 'assistant', content: reply }]);
+      setIsTalking(true);
+      videoRef.current?.play().catch(() => {});
+    } catch (err: any) {
+      setIsTalking(false);
+      videoRef.current?.pause();
+      toast.error(`Error: ${err.message}`);
+    } finally {
+      setLoadingSubmit(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setInput(e.target.value);
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || isToolInProgress) return;
+    submitQuery(input);
+    setInput('');
   };
 
   useEffect(() => {
@@ -267,13 +155,6 @@ const Chat = () => {
       videoRef.current.playsInline = true;
       videoRef.current.pause();
     }
-
-    // Check rate limit on mount
-    if (FastfolioTracking.hasReachedLimit()) {
-      setHasReachedLimit(true);
-      setShowFastfolioPopup(true);
-    }
-    
     if (initialQuery && !autoSubmitted) {
       setAutoSubmitted(true);
       setInput('');
@@ -282,98 +163,102 @@ const Chat = () => {
   }, [initialQuery, autoSubmitted]);
 
   useEffect(() => {
-    if (videoRef.current) {
-      if (isTalking) {
-        videoRef.current.play().catch((error) => {
-          console.error('Failed to play video:', error);
-        });
-      } else {
-        videoRef.current.pause();
-      }
-    }
+    if (!videoRef.current) return;
+    isTalking ? videoRef.current.play().catch(() => {}) : videoRef.current.pause();
   }, [isTalking]);
 
-  //@ts-ignore
-  const onSubmit = (e) => {
-    e.preventDefault();
-    
-    // Check rate limit
-    if (FastfolioTracking.hasReachedLimit()) {
-      setHasReachedLimit(true);
-      setShowFastfolioPopup(true);
-      return;
+  // ---- Derivations for header + single-turn list ----
+  const { currentAIMessage, latestUserMessage, lastPair } = useMemo(() => {
+    const aiIdx = messages.findLastIndex((m) => m.role === 'assistant');
+    const userIdx = messages.findLastIndex((m) => m.role === 'user');
+
+    let currentAIMessage: { role: string; content: string } | null =
+      aiIdx !== -1 ? messages[aiIdx] : null;
+
+    // If last message is user (awaiting assistant), "currentAIMessage" must be null.
+    if (aiIdx < userIdx) currentAIMessage = null;
+
+    // Build the latest (user + assistant) pair
+    let lastPair: { role: string; content: string }[] = [];
+    if (aiIdx !== -1) {
+      const prevUserIdx = [...messages]
+        .slice(0, aiIdx)
+        .findLastIndex((m) => m.role === 'user');
+      if (prevUserIdx !== -1) {
+        lastPair = [messages[prevUserIdx], messages[aiIdx]];
+      } else {
+        lastPair = [messages[aiIdx]];
+      }
     }
-    
-    if (!input.trim() || isToolInProgress) return;
-    submitQuery(input);
-    setInput('');
-  };
+
+    return {
+      currentAIMessage,
+      latestUserMessage: userIdx !== -1 ? messages[userIdx] : null,
+      lastPair,
+    };
+  }, [messages]);
+
+  // Pending detection
+  const pendingUserIndex =
+    currentAIMessage === null &&
+    messages.length > 0 &&
+    messages[messages.length - 1].role === 'user'
+      ? messages.length - 1
+      : -1;
+
+  const isPending = pendingUserIndex !== -1;
+
+  const isEmptyState =
+    messages.length === 0 ||
+    (!isPending && lastPair.length === 0);
+
+  const headerHeight = 180;
 
   const handleStop = () => {
-    stop();
     setLoadingSubmit(false);
     setIsTalking(false);
-    if (videoRef.current) {
-      videoRef.current.pause();
-    }
+    videoRef.current?.pause();
   };
 
-  // Check if this is the initial empty state (no messages)
-  const isEmptyState =
-    !currentAIMessage && !latestUserMessage && !loadingSubmit;
-
-  // Calculate header height based on hasActiveTool
-  const headerHeight = hasActiveTool ? 100 : 180;
-
   return (
-    <div className="relative h-screen overflow-hidden">
-      <FastfolioCTA />
-      <FastfolioPopup open={showFastfolioPopup} onOpenChange={setShowFastfolioPopup} hasReachedLimit={hasReachedLimit} />
-      <div className="absolute top-6 right-8 z-51 flex flex-col-reverse items-center justify-center gap-1 md:flex-row">
+    <div className="relative min-h-[100dvh] overflow-hidden bg-white">
+      {/* Help button */}
+      <div className="absolute right-8 top-6 z-50 flex flex-col-reverse items-center justify-center gap-1 md:flex-row">
         <WelcomeModal
           trigger={
-            <div className="hover:bg-accent cursor-pointer rounded-2xl px-3 py-1.5">
-              <Info className="text-accent-foreground h-8" />
+            <div className="cursor-pointer rounded-2xl px-3 py-1.5 hover:bg-accent">
+              <Info className="h-8 text-accent-foreground" />
             </div>
           }
         />
       </div>
 
-      {/* Fixed Avatar Header with Gradient */}
+      {/* Fixed avatar header with gradient */}
       <div
-        className="fixed top-0 right-0 left-0 z-50"
+        className="fixed left-0 right-0 top-0 z-40"
         style={{
           background:
-            'linear-gradient(to bottom, rgba(255, 255, 255, 1) 0%, rgba(255, 255, 255, 0.95) 30%, rgba(255, 255, 255, 0.8) 50%, rgba(255, 255, 255, 0) 100%)',
+            'linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0.95) 30%, rgba(255,255,255,0.85) 45%, rgba(255,255,255,0) 100%)',
         }}
       >
-        <div
-          className={`transition-all duration-300 ease-in-out ${hasActiveTool ? 'pt-6 pb-0' : 'py-6'}`}
-        >
+        <div className="py-6 transition-all duration-300 ease-in-out">
           <div className="flex justify-center">
             <ClientOnly>
-              <Avatar
-                hasActiveTool={hasActiveTool}
-                videoRef={videoRef}
-                isTalking={isTalking}
-              />
+              <Avatar hasActiveTool={false} videoRef={videoRef} isTalking={isTalking} />
             </ClientOnly>
           </div>
 
-          <AnimatePresence>
-            {latestUserMessage && !currentAIMessage && (
+          {/* Show only the latest user message while waiting */}
+          <AnimatePresence mode="wait">
+            {isPending && (
               <motion.div
+                key={`header-${messages[pendingUserIndex]?.content.slice(0, 24)}`}
                 {...MOTION_CONFIG}
                 className="mx-auto flex max-w-3xl px-4"
               >
                 <ChatBubble variant="sent">
                   <ChatBubbleMessage>
-                    <ChatMessageContent
-                      message={latestUserMessage}
-                      isLast={true}
-                      isLoading={false}
-                      reload={() => Promise.resolve(null)}
-                    />
+                    <ChatMessageContent message={messages[pendingUserIndex]} />
                   </ChatBubbleMessage>
                 </ChatBubble>
               </motion.div>
@@ -382,59 +267,59 @@ const Chat = () => {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="container mx-auto flex h-full max-w-3xl flex-col">
-        {/* Scrollable Chat Content */}
-        <div
-          className="flex-1 overflow-y-auto px-2"
-          style={{ paddingTop: `${headerHeight}px` }}
-        >
-          <AnimatePresence mode="wait">
-            {isEmptyState ? (
-              <motion.div
-                key="landing"
-                className="flex min-h-full items-center justify-center"
-                {...MOTION_CONFIG}
-              >
-                <ChatLanding submitQuery={submitQuery} hasReachedLimit={hasReachedLimit} />
-              </motion.div>
-            ) : currentAIMessage ? (
-              <div className="pb-4">
-                <SimplifiedChatView
-                  message={currentAIMessage}
-                  isLoading={isLoading}
-                  reload={reload}
-                  addToolResult={addToolResult}
-                />
-              </div>
-            ) : (
-              loadingSubmit && (
+      {/* Main column */}
+      <div className="container mx-auto flex h-[100dvh] max-w-3xl flex-col">
+        {/* Scrollable area */}
+        <div className="flex-1 overflow-y-auto overscroll-contain" style={{ paddingTop: `${headerHeight}px` }}>
+          <div className="mx-auto w-full max-w-3xl px-2 pb-36">
+            <AnimatePresence mode="wait">
+              {isEmptyState ? (
                 <motion.div
-                  key="loading"
+                  key="landing"
+                  className="flex min-h-full items-center justify-center px-4"
                   {...MOTION_CONFIG}
-                  className="px-4 pt-18"
                 >
-                  <ChatBubble variant="received">
-                    <ChatBubbleMessage isLoading />
-                  </ChatBubble>
+                  <ChatLanding submitQuery={submitQuery} hasReachedLimit={false} />
                 </motion.div>
-              )
-            )}
-          </AnimatePresence>
+              ) : isPending ? (
+                // Important: while pending, hide the previous pair completely
+                <motion.div key="pending-placeholder" {...MOTION_CONFIG} />
+              ) : (
+                <motion.div
+                  key={
+                    lastPair.map((m) => `${m.role}:${m.content.slice(0, 12)}`).join('|') ||
+                    'empty-pair'
+                  }
+                  className="space-y-6"
+                  {...MOTION_CONFIG}
+                >
+                  {lastPair.map((msg, idx) => (
+                    <SimplifiedChatView
+                      key={`${idx}-${msg.role}-${msg.content.slice(0, 12)}`}
+                      message={msg}
+                      isLoading={false}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
-        {/* Fixed Bottom Bar */}
-        <div className="sticky bottom-0 bg-white px-2 pt-3 md:px-0 md:pb-4">
-          <div className="relative flex flex-col items-center gap-3">
-            <HelperBoost submitQuery={submitQuery} setInput={setInput} hasReachedLimit={hasReachedLimit} />
+        {/* Sticky composer */}
+        <div
+          className="sticky bottom-0 bg-white px-2 pt-3 md:px-0 md:pb-4"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
+          <div className="relative mx-auto flex max-w-3xl flex-col items-center gap-3">
+            <HelperBoost submitQuery={submitQuery} />
             <ChatBottombar
-              input={hasReachedLimit ? "You've reached your message limit. Create your own Fastfolio to continue chatting!" : input}
-              handleInputChange={hasReachedLimit ? () => {} : handleInputChange}
+              input={input}
+              handleInputChange={handleInputChange}
               handleSubmit={onSubmit}
               isLoading={isLoading}
               stop={handleStop}
-              isToolInProgress={isToolInProgress || hasReachedLimit}
-              disabled={hasReachedLimit}
+              isToolInProgress={false}
             />
           </div>
           <PoweredByFastfolio />
@@ -442,6 +327,4 @@ const Chat = () => {
       </div>
     </div>
   );
-};
-
-export default Chat;
+}

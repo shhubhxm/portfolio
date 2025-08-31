@@ -1,132 +1,81 @@
 'use client';
 
-import { Message } from 'ai/react';
-import Markdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import React from 'react';
+import ReactMarkdown from 'react-markdown';
 
-export type ChatMessageContentProps = {
-  message: Message;
-  isLast?: boolean;
-  isLoading?: boolean;
-  reload?: () => Promise<string | null | undefined>;
-  addToolResult?: (args: { toolCallId: string; result: string }) => void;
-  skipToolRendering?: boolean;
-};
+interface ChatMessage {
+  role: string;
+  content: string;
+}
 
-const CodeBlock = ({ content }: { content: string }) => {
-  const [isOpen, setIsOpen] = useState(true);
+export default function ChatMessageContent({ message }: { message: ChatMessage }) {
+  const isAssistant = message.role === 'assistant';
 
-  // Extract language if present in the first line
-  const firstLineBreak = content.indexOf('\n');
-  const firstLine = content.substring(0, firstLineBreak).trim();
-  const language = firstLine || 'text';
-  const code = firstLine ? content.substring(firstLineBreak + 1) : content;
-
-  // Get first few lines for preview
-  const previewLines = code.split('\n').slice(0, 1).join('\n');
-  const hasMoreLines = code.split('\n').length > 1;
-
-  return (
-    <Collapsible
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      className="my-4 w-full overflow-hidden rounded-md"
+  // Typography system inspired by the paid version
+  // - Slightly larger font
+  // - Tighter margins
+  // - Nice lists spacing
+  return isAssistant ? (
+    <ReactMarkdown
+      components={{
+        h1: (props) => (
+          <h1
+            className="mb-3 mt-1 text-center text-[22px] font-semibold tracking-[-0.02em] text-neutral-900"
+            {...props}
+          />
+        ),
+        h2: (props) => (
+          <h2
+            className="mb-3 mt-1 text-center text-[20px] font-semibold tracking-[-0.02em] text-neutral-900"
+            {...props}
+          />
+        ),
+        h3: (props) => (
+          <h3
+            className="mb-2 mt-1 text-[18px] font-semibold tracking-[-0.01em] text-neutral-900"
+            {...props}
+          />
+        ),
+        p: (props) => (
+          <p className="mb-3 mt-1 text-[15px] text-neutral-800" {...props} />
+        ),
+        ul: (props) => (
+          <ul className="mb-3 ml-5 list-disc space-y-1 text-[15px] text-neutral-800" {...props} />
+        ),
+        ol: (props) => (
+          <ol className="mb-3 ml-5 list-decimal space-y-1 text-[15px] text-neutral-800" {...props} />
+        ),
+        li: (props) => <li className="leading-[1.55]" {...props} />,
+        strong: (props) => <strong className="font-semibold text-neutral-900" {...props} />,
+        a: (props) => (
+          <a
+            className="text-[#2F6BFF] underline decoration-[#2F6BFF]/40 underline-offset-2 hover:decoration-[#2F6BFF]"
+            target="_blank"
+            rel="noreferrer"
+            {...props}
+          />
+        ),
+        hr: () => <hr className="my-4 border-neutral-200" />,
+        blockquote: (props) => (
+          <blockquote
+            className="mb-3 mt-1 border-l-4 border-neutral-200 pl-3 text-[15px] text-neutral-700"
+            {...props}
+          />
+        ),
+        code: (props) => (
+          <code className="rounded bg-neutral-100 px-1.5 py-0.5 text-[13px] text-neutral-900" {...props} />
+        ),
+        pre: (props) => (
+          <pre
+            className="mb-3 mt-1 overflow-x-auto rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-[13px] leading-[1.5] text-neutral-900"
+            {...props}
+          />
+        ),
+      }}
     >
-      <div className="bg-secondary text-secondary-foreground flex items-center justify-between rounded-t-md border-b px-4 py-1">
-        <span className="text-xs">
-          {language !== 'text' ? language : 'Code'}
-        </span>
-        <CollapsibleTrigger className="hover:bg-secondary/80 rounded p-1">
-          {isOpen ? (
-            <ChevronUp className="h-4 w-4" />
-          ) : (
-            <ChevronDown className="h-4 w-4" />
-          )}
-        </CollapsibleTrigger>
-      </div>
-
-      <div className="bg-accent/80 text-accent-foreground rounded-b-md">
-        {!isOpen && hasMoreLines ? (
-          <pre className="px-4 py-3">
-            <code className="text-sm">{previewLines + '\n...'}</code>
-          </pre>
-        ) : (
-          <CollapsibleContent>
-            <div className="custom-scrollbar" style={{ overflowX: 'auto' }}>
-              <pre className="min-w-max px-4 py-3">
-                <code className="text-sm whitespace-pre">{code}</code>
-              </pre>
-            </div>
-          </CollapsibleContent>
-        )}
-      </div>
-    </Collapsible>
+      {message.content}
+    </ReactMarkdown>
+  ) : (
+    <p className="text-[15px] leading-[1.55]">{message.content}</p>
   );
-};
-
-export default function ChatMessageContent({
-  message,
-}: ChatMessageContentProps) {
-  // Only handle text parts
-  const renderContent = () => {
-    return message.parts?.map((part, partIndex) => {
-      if (part.type !== 'text' || !part.text) return null;
-
-      // Split content by code block markers
-      const contentParts = part.text.split('```');
-
-      return (
-        <div key={partIndex} className="w-full space-y-4">
-          {contentParts.map((content, i) =>
-            i % 2 === 0 ? (
-              // Regular text content
-              <div key={`text-${i}`} className="prose dark:prose-invert w-full">
-                <Markdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    p: ({ children }) => (
-                      <p className="break-words whitespace-pre-wrap">
-                        {children}
-                      </p>
-                    ),
-                    ul: ({ children }) => (
-                      <ul className="my-4 list-disc pl-6">{children}</ul>
-                    ),
-                    ol: ({ children }) => (
-                      <ol className="my-4 list-decimal pl-6">{children}</ol>
-                    ),
-                    li: ({ children }) => <li className="my-1">{children}</li>,
-                    a: ({ href, children }) => (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
-                      >
-                        {children}
-                      </a>
-                    ),
-                  }}
-                >
-                  {content}
-                </Markdown>
-              </div>
-            ) : (
-              // Code block content
-              <CodeBlock key={`code-${i}`} content={content} />
-            )
-          )}
-        </div>
-      );
-    });
-  };
-
-  return <div className="w-full">{renderContent()}</div>;
 }

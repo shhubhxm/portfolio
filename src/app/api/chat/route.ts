@@ -29,31 +29,32 @@ function errorHandler(error: unknown) {
 export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
-    console.log('[CHAT-API] Incoming messages:', messages);
-
     messages.unshift(SYSTEM_PROMPT);
 
-    const tools = {
-      getProjects,
-      getPresentation,
-      getResume,
-      getContact,
-      getSkills,
-      getSports,
-      getCrazy,
-      getInternship,
-    };
+    const groqMessages = messages.map((msg: any) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
 
-    const result = streamText({
-      model: openai('gpt-4o-mini'),
-      messages,
-      toolCallStreaming: true,
-      tools,
-      maxSteps: 2,
+    const groqResponse = await fetch(`${process.env.OPENAI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: process.env.MODEL,
+        messages: groqMessages,
+        // REMOVE stream: true
+      }),
     });
 
-    return result.toDataStreamResponse({
-      getErrorMessage: errorHandler,
+    const data = await groqResponse.json();
+    return new Response(JSON.stringify(data), {
+      status: groqResponse.status,
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
   } catch (err) {
     console.error('Global error:', err);

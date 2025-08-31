@@ -1,97 +1,47 @@
 'use client';
 
-import {
-  ChatBubble,
-  ChatBubbleMessage,
-} from '@/components/ui/chat/chat-bubble';
-import { ChatRequestOptions } from 'ai';
-import { Message } from 'ai/react';
 import { motion } from 'framer-motion';
 import ChatMessageContent from './chat-message-content';
-import ToolRenderer from './tool-renderer';
-
-interface SimplifiedChatViewProps {
-  message: Message;
-  isLoading: boolean;
-  reload: (
-    chatRequestOptions?: ChatRequestOptions
-  ) => Promise<string | null | undefined>;
-  addToolResult?: (args: { toolCallId: string; result: string }) => void;
-}
 
 const MOTION_CONFIG = {
-  initial: { opacity: 0, y: 20 },
+  initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: 20 },
-  transition: {
-    duration: 0.3,
-    ease: 'easeOut',
-  },
+  exit: { opacity: 0, y: 10 },
+  transition: { duration: 0.2, ease: 'easeOut' },
 };
 
 export function SimplifiedChatView({
   message,
-  isLoading,
-  reload,
-  addToolResult,
-}: SimplifiedChatViewProps) {
-  if (message.role !== 'assistant') return null;
+  isLoading = false,
+}: {
+  message: { role: string; content: string };
+  isLoading?: boolean;
+}) {
+  const isAssistant = message.role === 'assistant';
 
-  // Extract tool invocations that are in "result" state
-  const toolInvocations =
-    message.parts
-      ?.filter(
-        (part) =>
-          part.type === 'tool-invocation' &&
-          part.toolInvocation?.state === 'result'
-      )
-      .map((part) =>
-        part.type === 'tool-invocation' ? part.toolInvocation : null
-      )
-      .filter(Boolean) || [];
+  // Shared container (keeps everything centered & narrow)
+  const container = 'mx-auto w-full max-w-[720px] px-4';
 
-  // Only display the first tool (if any)
-  const currentTool = toolInvocations.length > 0 ? [toolInvocations[0]] : [];
-
-  const hasTextContent = message.content.trim().length > 0;
-  const hasTools = currentTool.length > 0;
-
-  console.log('currentTool', currentTool);
+  // Bubble styles
+  const bubbleBase =
+    'rounded-2xl px-4 py-3 leading-[1.55] tracking-[-0.01em]';
+  const assistantStyle =
+    'bg-white text-neutral-900 border border-neutral-200 shadow-[0_1px_2px_rgba(0,0,0,0.04)]';
+  const userStyle =
+    'bg-[#2F6BFF] text-white shadow-[0_2px_10px_rgba(47,107,255,0.25)]';
 
   return (
-    <motion.div {...MOTION_CONFIG} className="flex h-full w-full flex-col px-4">
-      {/* Single scrollable container for both tool and text content */}
-      <div className="custom-scrollbar flex h-full w-full flex-col overflow-y-auto">
-        {/* Tool invocation result - displayed at the top */}
-        {hasTools && (
-          <div className="mb-4 w-full">
-            <ToolRenderer
-              toolInvocations={currentTool}
-              messageId={message.id || 'current-msg'}
-            />
+    <motion.div {...MOTION_CONFIG} className="w-full">
+      <div className={container}>
+        <div className={`${bubbleBase} ${isAssistant ? assistantStyle : userStyle}`}>
+          <ChatMessageContent message={message} />
+        </div>
+
+        {isLoading && (
+          <div className="mt-2 text-center text-sm text-neutral-500">
+            Generating response…
           </div>
         )}
-
-        {/* Text content */}
-        {hasTextContent && (
-          <div className="w-full">
-            <ChatBubble variant="received" className="w-full">
-              <ChatBubbleMessage className="w-full">
-                <ChatMessageContent
-                  message={message}
-                  isLast={true}
-                  isLoading={isLoading}
-                  reload={reload}
-                  addToolResult={addToolResult}
-                  skipToolRendering={true}
-                />
-              </ChatBubbleMessage>
-            </ChatBubble>
-          </div>
-        )}
-
-        {/* Add some padding at the bottom for better scrolling experience */}
-        <div className="pb-4"></div>
       </div>
     </motion.div>
   );

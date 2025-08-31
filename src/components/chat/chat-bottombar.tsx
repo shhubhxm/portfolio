@@ -1,21 +1,13 @@
-// src/components/chat/chat-bottombar.tsx
 'use client';
 
-import { ChatRequestOptions } from 'ai';
-import { motion } from 'framer-motion';
-import { ArrowRight, ArrowUp } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
-import { FastfolioTracking } from '@/lib/fastfolio-tracking';
+import React from 'react';
 
 interface ChatBottombarProps {
+  input: string;
   handleInputChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleSubmit: (
-    e: React.FormEvent<HTMLFormElement>,
-    chatRequestOptions?: ChatRequestOptions
-  ) => void;
+  handleSubmit: (e: React.FormEvent<HTMLFormElement>) => void;
   isLoading: boolean;
   stop: () => void;
-  input: string;
   isToolInProgress: boolean;
   disabled?: boolean;
 }
@@ -29,70 +21,44 @@ export default function ChatBottombar({
   isToolInProgress,
   disabled = false,
 }: ChatBottombarProps) {
-  const inputRef = React.useRef<HTMLInputElement>(null);
-  const [remainingMessages, setRemainingMessages] = useState(0);
-  
-  useEffect(() => {
-    // Update remaining messages count
-    setRemainingMessages(FastfolioTracking.getRemainingMessages());
-  }, [input]); // Update when input changes (user is typing)
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (
-      e.key === 'Enter' &&
-      !e.nativeEvent.isComposing &&
-      !isToolInProgress &&
-      input.trim()
-    ) {
-      e.preventDefault();
-      handleSubmit(e as unknown as React.FormEvent<HTMLFormElement>);
-    }
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (isLoading || isToolInProgress || disabled || !input.trim()) return;
+    handleSubmit(e);
   };
 
-  useEffect(() => {
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [inputRef]);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="w-full pb-2 md:pb-5"
-    >
-      <form onSubmit={handleSubmit} className="relative w-full md:px-4">
-        <div className="mx-auto flex items-center rounded-full border border-[#E5E5E9] bg-[#ECECF0] py-2 pr-2 pl-6">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyPress}
-            placeholder={
-              disabled ? '' : isToolInProgress ? 'Tool is in progress...' : 'Ask me anything'
-            }
-            className={`text-md w-full border-none bg-transparent placeholder:text-gray-500 focus:outline-none ${
-              disabled ? 'text-red-600 font-medium' : 'text-black'
-            }`}
-            disabled={isToolInProgress || isLoading || disabled}
-          />
+    <form onSubmit={onSubmit} className="w-full">
+      <div className="mx-auto flex w-full max-w-3xl items-center gap-2 rounded-full border border-neutral-200 bg-white/80 px-3 py-2 shadow-sm backdrop-blur md:px-4">
+        <input
+          type="text"
+          value={input}
+          onChange={handleInputChange}
+          placeholder={disabled ? '' : isToolInProgress ? 'Working…' : 'Ask me anything'}
+          className={`flex-1 bg-transparent px-2 py-2 outline-none placeholder:text-neutral-400 ${
+            disabled ? 'text-red-600 font-medium' : 'text-black'
+          }`}
+          disabled={isToolInProgress || isLoading || disabled}
+        />
 
+        {isLoading ? (
+          <button
+            type="button"
+            onClick={stop}
+            className="rounded-full px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+          >
+            Stop
+          </button>
+        ) : (
           <button
             type="submit"
             disabled={isLoading || !input.trim() || isToolInProgress || disabled}
-            className="flex items-center justify-center rounded-full bg-[#0171E3] p-2 text-white disabled:opacity-50"
-            onClick={(e) => {
-              if (isLoading) {
-                e.preventDefault();
-                stop();
-              }
-            }}
+            className="rounded-full bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <ArrowUp className="h-6 w-6" />
+            Send
           </button>
-        </div>
-      </form>
-    </motion.div>
+        )}
+      </div>
+    </form>
   );
 }
